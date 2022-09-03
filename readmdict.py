@@ -431,9 +431,9 @@ class MDict(object):
     def items(self):
         """Return a generator which in turn produce tuples in the form of (filename, content)
         """
-        return self._decode_record_block()
+        return self._read_records()
 
-    def _decode_record_block(self):
+    def _read_records(self):
         f = open(self._fname, 'rb')
         f.seek(self._record_block_offset)
 
