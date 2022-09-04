@@ -67,16 +67,9 @@ def _salsa_decrypt(ciphertext, encrypt_key):
     return s20.encryptBytes(ciphertext)
 
 
-def _decrypt_regcode_by_deviceid(reg_code, deviceid):
-    deviceid_digest = ripemd128(deviceid)
-    s20 = Salsa20(key=deviceid_digest, IV=b"\x00"*8, rounds=8)
-    encrypt_key = s20.encryptBytes(reg_code)
-    return encrypt_key
-
-
-def _decrypt_regcode_by_email(reg_code, email):
-    email_digest = ripemd128(email.decode().encode('utf-16-le'))
-    s20 = Salsa20(key=email_digest, IV=b"\x00"*8, rounds=8)
+def _decrypt_regcode_by_userid(reg_code, userid):
+    userid_digest = ripemd128(userid)
+    s20 = Salsa20(key=userid_digest, IV=b"\x00"*8, rounds=8)
     encrypt_key = s20.encryptBytes(reg_code)
     return encrypt_key
 
@@ -98,10 +91,7 @@ class MDict(object):
             regcode, userid = passcode
             if isinstance(userid, unicode):
                 userid = userid.encode('utf8')
-            if self.header[b'RegisterBy'] == b'EMail':
-                self._encrypted_key = _decrypt_regcode_by_email(regcode, userid)
-            else:
-                self._encrypted_key = _decrypt_regcode_by_deviceid(regcode, userid)
+            self._encrypted_key = _decrypt_regcode_by_userid(regcode, userid)
 
         # if no regcode is given, try brutal force (only for engine <= 2)
         if (self._encrypt & 0x01) and passcode is None:
