@@ -17,14 +17,33 @@ MDict stores the dictionary definitions, i.e. (key word, explanation) in MDX fil
 the dictionary reference data, e.g. images, pronunciations, stylesheets in MDD file.
 Although holding different contents, these two file formats share the same structure.
 
-MDX File Format
-===============
+MDict v1 and v2 Format
+======================
+MdxBuilder 2.x creates v1 format and MdxBuilder 3.x creates v2 format.
+
 .. image:: MDX.svg
 
-
-MDD File Format
-===============
 .. image:: MDD.svg
+
+MDict v3 Format
+===============
+MdxBuilder 4.x creates v3 format. The major changes are,
+
+* The file is divided into 4 blocks, i.e. key index, key data, record index and record data.
+  And all blocks have the same structure. The decoded block holds type dependent data.
+* Partial block data (first 16 bytes as now) is always encrypted (after possible compression), via _fast_encrypt or salsa_encrypt.
+  The encryption key derives from the adler32 checksum of the block data, but the algorithm is not a simple ripemd128. ::
+
+  >>> data = b'<RecordIndex encoding="UTF-8" recordCount="14"/>\r\n'
+  >>> alder32 = zlib.adler32(data)
+  >>> mdxbuilder_encrypted = b'\x1C\x72\x4D\x6A\xEA\xF1\x2E\xA5\x16\xE1\x10\x41\x9E\xFF\x62\x95oding="UTF-8" recordCount="14"/>\r\n'
+  >>> _fast_encrypt(data[:16], key=ripemd128(struct.pack('<I', alder32)))
+  b'\x91\x80;n\xd8\xb6\xf9\xb4\xa4\x9eW\xf6\x00{Y\xb3oding="UTF-8" recordCount="14"/>\r\n'
+
+If the file is created using a global encryption key, which is known from MdxKeyGen.exe, it can used to decrypt the data.
+Otherwise it is _not_ yet possible to read MDict v3 formatted files, until this encryption algorithm is understood.
+
+.. image:: MDict3.svg
 
 Example Programs
 ================
