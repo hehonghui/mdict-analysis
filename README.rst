@@ -49,11 +49,11 @@ readmdict.py is an example implementation in Python. This program can read/extra
    xxhash is required to read mdx files created with engine 3.0.
    Get Windows version from http://www.lfd.uci.edu/~gohlke/pythonlibs
 
-It can be used as a command line tool. Suppose one has oald8.mdx and oald8.mdd::
+It can be used as a command line tool. Suppose one has *oald8.mdx* and *oald8.mdd*::
 
     $ python readmdict.py -x oald8.mdx
 
-This will creates *oald8.txt* dictionary file and creates a folder *data* for images, pronunciation audio files.
+This will create a dictionary file *oald8.txt* and a folder *data* for images, pronunciation audio files.
 
 On Windows, one can also double click it and select the file in the popup dialog.
 
@@ -71,6 +71,7 @@ Read MDX file and print the first entry::
     Out[4]:
     ('A',
      '<span style=\'display:block;color:black;\'>.........')
+
 ``mdx`` is an object having all info from a MDX file. ``items`` is an iterator producing 2-item tuples.
 Of each tuple, the first element is the entry text and the second is the explanation. Both are UTF-8 encoded strings.
 
