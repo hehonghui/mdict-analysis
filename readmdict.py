@@ -169,7 +169,7 @@ class MDict(object):
 
         # check adler checksum over decrypted data
         if self._version >= 3:
-            assert(hex(adler32) == hex(zlib.adler32(decrypted_block) &0xffffffff))
+            assert(hex(adler32) == hex(zlib.adler32(decrypted_block) & 0xffffffff))
 
         # decompress
         if compression_method == 0:
@@ -186,7 +186,7 @@ class MDict(object):
 
         # check adler checksum over decompressed data
         if self._version < 3:
-            assert(hex(adler32) == hex(zlib.adler32(decompressed_block) &0xffffffff))
+            assert(hex(adler32) == hex(zlib.adler32(decompressed_block) & 0xffffffff))
 
         return decompressed_block
     
@@ -594,6 +594,7 @@ class MDict(object):
 
     def _treat_record_data(self, data):
         return data
+
 
 class MDD(MDict):
     """
