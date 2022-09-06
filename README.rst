@@ -34,8 +34,7 @@ MdxBuilder 4.x creates v3 format. The major changes are,
 * Partial block data (first 16 bytes as now) is always encrypted (after possible compression), via _fast_encrypt or _salsa_encrypt.
   The encryption key derives from the dictionary header's UUID value, ::
 
-  key = xxh64_digest(uuid[:18]) + xxh64_digest(uuid[18:])
-
+    key = xxh64_digest(uuid[:18]) + xxh64_digest(uuid[18:])
 
 .. image:: MDict3.svg
 
