@@ -403,7 +403,6 @@ class MDict(object):
             compressed_size = self._read_int32(f)
             block_data = f.read(compressed_size)
             decompressed_block_data = self._decode_block(block_data, decompressed_size)
-            open('a', 'wb').write(decompressed_block_data)
             key_list.extend(self._split_key_block(decompressed_block_data))
 
         f.close()
