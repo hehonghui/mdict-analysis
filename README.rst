@@ -31,17 +31,11 @@ MdxBuilder 4.x creates v3 format. The major changes are,
 
 * The file is divided into 4 blocks, i.e. key index, key data, record index and record data.
   And all blocks have the same structure. The decoded block holds type dependent data.
-* Partial block data (first 16 bytes as now) is always encrypted (after possible compression), via _fast_encrypt or salsa_encrypt.
-  The encryption key derives from the adler32 checksum of the block data, but the algorithm is not a simple ripemd128. ::
+* Partial block data (first 16 bytes as now) is always encrypted (after possible compression), via _fast_encrypt or _salsa_encrypt.
+  The encryption key derives from the dictionary header's UUID value, ::
 
-  >>> data = b'<RecordIndex encoding="UTF-8" recordCount="14"/>\r\n'
-  >>> alder32 = zlib.adler32(data)
-  >>> mdxbuilder_encrypted = b'\x1C\x72\x4D\x6A\xEA\xF1\x2E\xA5\x16\xE1\x10\x41\x9E\xFF\x62\x95oding="UTF-8" recordCount="14"/>\r\n'
-  >>> _fast_encrypt(data[:16], key=ripemd128(struct.pack('<I', alder32)))
-  b'\x91\x80;n\xd8\xb6\xf9\xb4\xa4\x9eW\xf6\x00{Y\xb3oding="UTF-8" recordCount="14"/>\r\n'
+  key = xxh64_digest(uuid[:18]) + xxh64_digest(uuid[18:])
 
-If the file is created using a global encryption key, which is known from MdxKeyGen.exe, it can used to decrypt the data.
-Otherwise it is _not_ yet possible to read MDict v3 formatted files, until this encryption algorithm is understood.
 
 .. image:: MDict3.svg
 
@@ -53,7 +47,8 @@ readmdict.py
 readmdict.py is an example implementation in Python. This program can read/extract mdx/mdd files.
 
 .. note:: python-lzo is required to read mdx files created with engine 1.2.
-   Get Windows version from http://www.lfd.uci.edu/~gohlke/pythonlibs/#python-lzo
+   xxhash is required to read mdx files created with engine 3.0.
+   Get Windows version from http://www.lfd.uci.edu/~gohlke/pythonlibs
 
 It can be used as a command line tool. Suppose one has oald8.mdx and oald8.mdd::
 
@@ -73,7 +68,7 @@ Read MDX file and print the first entry::
 
     In [3]: items = mdx.items()
 
-    In [4]: items.next()
+    In [4]: next(items)
     Out[4]:
     ('A',
      '<span style=\'display:block;color:black;\'>.........')
@@ -86,7 +81,7 @@ Read MDD file and print the first entry::
 
     In [6]: items = mdd.items()
 
-    In [7]: items = mdd.next()
+    In [7]: next(items)
     Out[7]: 
     (u'\\pic\\accordion_concertina.jpg',
     '\xff\xd8\xff\xe0\x00\x10JFIF...........')

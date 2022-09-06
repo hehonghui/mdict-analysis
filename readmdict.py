@@ -3,7 +3,7 @@
 # readmdict.py
 # Octopus MDict Dictionary File (.mdx) and Resource File (.mdd) Analyser
 #
-# Copyright (C) 2012, 2013, 2015 Xiaoqiang Wang <xiaoqiangwang AT gmail DOT com>
+# Copyright (C) 2012, 2013, 2015, 2022 Xiaoqiang Wang <xiaoqiangwang AT gmail DOT com>
 #
 # This program is a free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -32,7 +32,12 @@ try:
     import lzo
 except ImportError:
     lzo = None
-    print("LZO compression support is not available")
+
+# xxhash is used for engine version >= 3.0
+try:
+    import xxhash
+except ImportError:
+    xxhash = None
 
 # 2x3 compatible
 if sys.hexversion >= 0x03000000:
@@ -51,6 +56,9 @@ def _unescape_entities(text):
 
 
 def _fast_decrypt(data, key):
+    """
+    XOR decryption
+    """
     b = bytearray(data)
     key = bytearray(key)
     previous = 0x36
@@ -63,6 +71,9 @@ def _fast_decrypt(data, key):
 
 
 def _salsa_decrypt(ciphertext, encrypt_key):
+    """
+    salsa20 (8 rounds) decryption
+    """
     s20 = Salsa20(key=encrypt_key, IV=b"\x00"*8, rounds=8)
     return s20.encryptBytes(ciphertext)
 
@@ -92,13 +103,15 @@ class MDict(object):
             if isinstance(userid, unicode):
                 userid = userid.encode('utf8')
             self._encrypted_key = _decrypt_regcode_by_userid(regcode, userid)
+        # MDict 3.0 encription key derives from UUID
+        elif self._version >= 3.0:
+            if xxhash is None:
+                raise RuntimeError('xxhash module is needed to read MDict 3.0 format')
+            uuid = self.header[b'UUID']
+            mid = (len(uuid) + 1) // 2
+            self._encrypted_key = xxhash.xxh64_digest(uuid[:mid]) + xxhash.xxh64_digest(uuid[mid:])
 
-        # if no regcode is given, try brutal force (only for engine <= 2)
-        if (self._encrypt & 0x01) and passcode is None:
-            print("Try Brutal Force on Encrypted Key Blocks")
-            self._key_list = self._read_keys_brutal()
-        else:
-            self._key_list = self._read_keys()
+        self._key_list = self._read_keys()
 
     def __len__(self):
         return self._num_entries
@@ -114,6 +127,9 @@ class MDict(object):
 
     def _read_number(self, f):
         return unpack(self._number_format, f.read(self._number_width))[0]
+
+    def _read_int32(self, f):
+        return unpack('>I', f.read(4))[0]
 
     def _parse_header(self, header):
         """
@@ -134,8 +150,9 @@ class MDict(object):
 
         # adler checksum of the block data used as the encryption key if none given
         adler32 = unpack('>I', block[4:8])[0]
-        if self._encrypted_key is None:
-            self._encrypted_key = ripemd128(block[4:8])
+        encrypted_key = self._encrypted_key
+        if encrypted_key is None:
+            encrypted_key = ripemd128(block[4:8])
 
         # block data
         data = block[8:]
@@ -144,11 +161,15 @@ class MDict(object):
         if encryption_method == 0:
             decrypted_block = data
         elif encryption_method == 1:
-            decrypted_block = _fast_decrypt(data[:encryption_size], self._encrypted_key) + data[encryption_size:]
+            decrypted_block = _fast_decrypt(data[:encryption_size], encrypted_key) + data[encryption_size:]
         elif encryption_method == 2:
-            decrypted_block = _salsa_decrypt(data[:encryption_size], self._encrypted_key) + data[encryption_size:]
+            decrypted_block = _salsa_decrypt(data[:encryption_size], encrypted_key) + data[encryption_size:]
         else:
             raise Exception('encryption method %d not supported' % encryption_method)
+
+        # check adler checksum over decrypted data
+        if self._version >= 3:
+            assert(hex(adler32) == hex(zlib.adler32(decrypted_block) &0xffffffff))
 
         # decompress
         if compression_method == 0:
@@ -163,8 +184,9 @@ class MDict(object):
         else:
             raise Exception('compression method %d not supported' % compression_method)
 
-        # check adler checksum
-        assert(hex(adler32) == hex(zlib.adler32(decompressed_block) &0xffffffff))
+        # check adler checksum over decompressed data
+        if self._version < 3:
+            assert(hex(adler32) == hex(zlib.adler32(decompressed_block) &0xffffffff))
 
         return decompressed_block
     
@@ -282,6 +304,7 @@ class MDict(object):
         else:
             header_text = header_bytes[:-1]
         header_tag = self._parse_header(header_text)
+
         if not self._encoding:
             encoding = header_tag.get(b'Encoding', b'utf-8')
             if sys.hexversion >= 0x03000000:
@@ -290,6 +313,7 @@ class MDict(object):
             if encoding in ['GBK', 'GB2312']:
                 encoding = 'GB18030'
             self._encoding = encoding
+
         # encryption flag
         #   0x00 - no encryption, "Allow export to text" is checked in MdxBuilder 3.
         #   0x01 - encrypt record block, "Encryption Key" is given in MdxBuilder 3.
@@ -322,10 +346,71 @@ class MDict(object):
         else:
             self._number_width = 8
             self._number_format = '>Q'
+            # version 3.0 uses UTF-8 only
+            if self._version >= 3:
+                self._encoding = 'UTF-8'
 
         return header_tag
 
     def _read_keys(self):
+        if self._version >= 3:
+            return self._read_keys_v3()
+        else:
+            # if no regcode is given, try brutal force (only for engine <= 2)
+            if (self._encrypt & 0x01) and self._encrypted_key is None:
+                print("Try Brutal Force on Encrypted Key Blocks")
+                return self._read_keys_brutal()
+            else:
+                return self._read_keys_v1v2()
+
+    def _read_keys_v3(self):
+        f = open(self._fname, 'rb')
+        f.seek(self._key_block_offset)
+
+        # find all blocks offset
+        while True:
+            block_type = self._read_int32(f)
+            block_size = self._read_number(f)
+            block_offset = f.tell()
+            # record data
+            if block_type == 0x01000000:
+                self._record_block_offset = block_offset
+            # record index
+            elif block_type == 0x02000000:
+                self._record_index_offset = block_offset
+            # key data
+            elif block_type == 0x03000000:
+                self._key_data_offset = block_offset
+            # key index
+            elif block_type == 0x04000000:
+                self._key_index_offset = block_offset
+            else:
+                raise RuntimeError("Unknown block type %d" % block_type)
+            f.seek(block_size, 1)
+            # test the end of file
+            if f.read(4):
+                f.seek(-4, 1)
+            else:
+                break
+
+        # read key data
+        f.seek(self._key_data_offset)
+        number = self._read_int32(f)
+        total_size = self._read_number(f)
+        key_list = []
+        for i in range(number):
+            decompressed_size = self._read_int32(f)
+            compressed_size = self._read_int32(f)
+            block_data = f.read(compressed_size)
+            decompressed_block_data = self._decode_block(block_data, decompressed_size)
+            open('a', 'wb').write(decompressed_block_data)
+            key_list.extend(self._split_key_block(decompressed_block_data))
+
+        f.close()
+        self._num_entries = len(key_list)
+        return key_list
+
+    def _read_keys_v1v2(self):
         f = open(self._fname, 'rb')
         f.seek(self._key_block_offset)
 
@@ -424,6 +509,44 @@ class MDict(object):
         return self._read_records()
 
     def _read_records(self):
+        if self._version >= 3:
+            yield from self._read_records_v3()
+        else:
+            yield from self._read_records_v1v2()
+
+    def _read_records_v3(self):
+        f = open(self._fname, 'rb')
+        f.seek(self._record_block_offset)
+
+        offset = 0
+        i = 0
+        size_counter = 0
+
+        num_record_blocks = self._read_int32(f)
+        num_bytes = self._read_number(f)
+        for j in range(num_record_blocks):
+            decompressed_size = self._read_int32(f)
+            compressed_size = self._read_int32(f)
+            record_block = self._decode_block(f.read(compressed_size), decompressed_size)
+
+            # split record block according to the offset info from key block
+            while i < len(self._key_list):
+                record_start, key_text = self._key_list[i]
+                # reach the end of current record block
+                if record_start - offset >= len(record_block):
+                    break
+                # record end index
+                if i < len(self._key_list)-1:
+                    record_end = self._key_list[i+1][0]
+                else:
+                    record_end = len(record_block) + offset
+                i += 1
+                data = record_block[record_start-offset:record_end-offset]
+                yield key_text, self._treat_record_data(data)
+            offset += len(record_block)
+            size_counter += compressed_size
+
+    def _read_records_v1v2(self):
         f = open(self._fname, 'rb')
         f.seek(self._record_block_offset)
 
@@ -555,8 +678,12 @@ if __name__ == '__main__':
 
     # use GUI to select file, default to extract
     if not args.filename:
-        import Tkinter
-        import tkFileDialog
+        if sys.hexversion < 0x03000000:
+            import Tkinter
+            import tkFileDialog
+        else:
+            import tkinter as Tkinter
+            import tkinter.filedialog as tkFileDialog
         root = Tkinter.Tk()
         root.withdraw()
         args.filename = tkFileDialog.askopenfilename(parent=root)
