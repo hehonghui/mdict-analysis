@@ -103,7 +103,7 @@ class MDict(object):
             if isinstance(userid, unicode):
                 userid = userid.encode('utf8')
             self._encrypted_key = _decrypt_regcode_by_userid(regcode, userid)
-        # MDict 3.0 encription key derives from UUID
+        # MDict 3.0 encryption key derives from UUID
         elif self._version >= 3.0:
             if xxhash is None:
                 raise RuntimeError('xxhash module is needed to read MDict 3.0 format')
