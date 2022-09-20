@@ -32,9 +32,13 @@ MdxBuilder 4.x creates v3 format. The major changes are,
 * The file is divided into 4 blocks, i.e. key index, key data, record index and record data.
   And all blocks have the same structure. The decoded block holds type dependent data.
 * Partial block data (first 16 bytes as now) is always encrypted (after possible compression), via _fast_encrypt or _salsa_encrypt.
-  The encryption key derives from the dictionary header's UUID value, ::
+  The encryption key derives globally from the dictionary header's UUID value (since MdxBuilder 4.0 RC4), ::
 
     key = xxh64_digest(uuid[:18]) + xxh64_digest(uuid[18:])
+
+  or individually from each block data's Adler-32 checksum (until MdxBuilder 4.0 RC2), ::
+
+    key = ripemd128(alder)
 
 .. image:: MDict3.svg
 
