@@ -107,9 +107,10 @@ class MDict(object):
         elif self._version >= 3.0:
             if xxhash is None:
                 raise RuntimeError('xxhash module is needed to read MDict 3.0 format')
-            uuid = self.header[b'UUID']
-            mid = (len(uuid) + 1) // 2
-            self._encrypted_key = xxhash.xxh64_digest(uuid[:mid]) + xxhash.xxh64_digest(uuid[mid:])
+            uuid = self.header.get(b'UUID')
+            if uuid:
+                mid = (len(uuid) + 1) // 2
+                self._encrypted_key = xxhash.xxh64_digest(uuid[:mid]) + xxhash.xxh64_digest(uuid[mid:])
 
         self._key_list = self._read_keys()
 
