@@ -333,8 +333,8 @@ class MDict(object):
         # store stylesheet in dict in the form of
         # {'number' : ('style_begin', 'style_end')}
         self._stylesheet = {}
-        if header_tag.get('StyleSheet'):
-            lines = header_tag['StyleSheet'].splitlines()
+        if header_tag.get(b'StyleSheet'):
+            lines = header_tag[b'StyleSheet'].splitlines()
             for i in range(0, len(lines), 3):
                 self._stylesheet[lines[i]] = (lines[i+1], lines[i+2])
 
@@ -738,10 +738,10 @@ if __name__ == '__main__':
                 tf.write(b'</>\r\n')
             tf.close()
             # write out style
-            if mdx.header.get('StyleSheet'):
+            if mdx.header.get(b'StyleSheet'):
                 style_fname = ''.join([base, '_style', os.path.extsep, 'txt'])
                 sf = open(style_fname, 'wb')
-                sf.write(b'\r\n'.join(mdx.header['StyleSheet'].splitlines()))
+                sf.write(b'\r\n'.join(mdx.header[b'StyleSheet'].splitlines()))
                 sf.close()
         # write out optional data files
         if mdd:
