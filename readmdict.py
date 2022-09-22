@@ -671,7 +671,7 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--datafolder', default="data",
                         help='folder to extract data files from mdd')
     parser.add_argument('-e', '--encoding', default="",
-                        help='folder to extract data files from mdd')
+                        help='override the encoding specified in the mdx file')
     parser.add_argument('-p', '--passcode', default=None, type=passcode,
                         help='register_code,email_or_deviceid')
     parser.add_argument("filename", nargs='?', help="mdx file name")
@@ -709,20 +709,26 @@ if __name__ == '__main__':
     else:
         mdx = None
 
-    # find companion mdd file
-    mdd_filename = ''.join([base, os.path.extsep, 'mdd'])
-    if os.path.exists(mdd_filename):
-        mdd = MDD(mdd_filename, args.passcode)
-        if type(mdd_filename) is unicode:
-            bfname = mdd_filename.encode('utf-8')
+    # find companion mdd file(s)
+    i = 0
+    mdds = []
+    while True:
+        extra = '' if i == 0 else '.%d' % i
+        mdd_filename = ''.join([base, extra, os.path.extsep, 'mdd'])
+        if os.path.exists(mdd_filename):
+            mdd = MDD(mdd_filename, args.passcode)
+            if type(mdd_filename) is unicode:
+                bfname = mdd_filename.encode('utf-8')
+            else:
+                bfname = mdd_filename
+            print('======== %s ========' % bfname)
+            print('  Number of Entries : %d' % len(mdd))
+            for key, value in mdd.header.items():
+                print('  %s : %s' % (key, value))
+            mdds.append(mdd)
         else:
-            bfname = mdd_filename
-        print('======== %s ========' % bfname)
-        print('  Number of Entries : %d' % len(mdd))
-        for key, value in mdd.header.items():
-            print('  %s : %s' % (key, value))
-    else:
-        mdd = None
+            break
+        i += 1
 
     if args.extract:
         # write out glos
@@ -744,15 +750,16 @@ if __name__ == '__main__':
                 sf.write(b'\r\n'.join(mdx.header[b'StyleSheet'].splitlines()))
                 sf.close()
         # write out optional data files
-        if mdd:
+        if mdds:
             datafolder = os.path.join(os.path.dirname(args.filename), args.datafolder)
             if not os.path.exists(datafolder):
                 os.makedirs(datafolder)
-            for key, value in mdd.items():
-                fname = key.decode('utf-8').replace('\\', os.path.sep)
-                dfname = datafolder + fname
-                if not os.path.exists(os.path.dirname(dfname)):
-                    os.makedirs(os.path.dirname(dfname))
-                df = open(dfname, 'wb')
-                df.write(value)
-                df.close()
+            for mdd in mdds:
+                for key, value in mdd.items():
+                    fname = key.decode('utf-8').replace('\\', os.path.sep)
+                    dfname = datafolder + fname
+                    if not os.path.exists(os.path.dirname(dfname)):
+                        os.makedirs(os.path.dirname(dfname))
+                    df = open(dfname, 'wb')
+                    df.write(value)
+                    df.close()
